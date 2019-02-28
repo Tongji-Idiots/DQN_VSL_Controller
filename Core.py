@@ -38,7 +38,7 @@ class DuelingNetwork(nn.Module):
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=5, stride=2),
             nn.ReLU(),
-            nn.Conv2d(64, 256, kernel_size=3, stride=1),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
             nn.ReLU()
         )
 
@@ -66,7 +66,7 @@ class DuelingNetwork(nn.Module):
         adv = self.fully_connected_adv(conv_out)
         return val + adv - adv.mean()
 
-'''class DQN(nn.Module):
+class DQN(nn.Module):
     """Basic neural network framework"""
     def __init__(self, input_shape, n_actions):
         super(DQN, self).__init__()
@@ -76,7 +76,7 @@ class DuelingNetwork(nn.Module):
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=5, stride=2),
             nn.ReLU(),
-            nn.Conv2d(64, 256, kernel_size=3, stride=1),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
             nn.ReLU()
         )
 
@@ -94,7 +94,7 @@ class DuelingNetwork(nn.Module):
     def forward(self, x):
         fx = x.float()
         conv_out = self.conv(fx).view(fx.size()[0], -1)
-        return self.fc(conv_out)'''
+        return self.fc(conv_out)
 
 # Saving model
 def save_model(net, buffer, beta, optim, path, frame):
@@ -120,15 +120,15 @@ def load_model(net, path):
 	pos = state_dict['pos']
 	optimizer = state_dict['optimizer']
 	net.train()
-	return net, frame, buffer, priorities, pos, optimizer
+	return net, frame + 1, buffer, priorities, pos, optimizer
 
 # Training
 def Core():   
-    writer = SummaryWriter(comment = '-VSL-DuelingNetwork')
+    writer = SummaryWriter(comment = '-VSL-Dueling')
     env = Env.SumoEnv(writer, frameskip= 10, death_factor= params['death_factor'])  ###This IO needs to be modified
     #env = env.unwrapped
     #print(env_traino.state_shape)
-    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 3, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
+    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 3, episodic_life= False, reward_clipping= True)  ###wrapper could be modified
     #print(env.action_space.n)
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
@@ -149,6 +149,11 @@ def Core():
         else:
             device = torch.device('cpu')
             print("Now using CPU for training")
+    else:
+        device = torch.device('cpu')
+        print("Now using CPU for training")
+    
+    print("Observation space:", env.observation_space.shape, " Action size:", env.action_space.n)
 
     tgt_net = agent.TargetNet(net)
     selector = action.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
@@ -199,10 +204,6 @@ def Core():
             if new_rewards:
                 writer.add_scalar("Interaction/Beta", beta, frame_idx)
                 if reward_tracker.reward(new_rewards[0], frame_idx, selector.epsilon):
-                    #saving model
-                    if len(buffer) > params['replay_initial']:
-                       save_model(net, buffer, beta, optimizer, path, frame_idx)
-                       print("\n=> Checkpoint reached.\n=>Network saved at %s" % path)
                     env.close()
                     break
 
@@ -232,6 +233,11 @@ def Core():
             writer.add_scalar("Train/Loss", loss_v, frame_idx)
             for name, netparam in net.named_parameters():
                     writer.add_histogram('Model/' + name, netparam.clone().cpu().data.numpy(), frame_idx)
+            
+            #saving model
+            if new_rewards:
+                save_model(net, buffer, beta, optimizer, path, frame_idx)
+                print("\n=> Checkpoint reached.\n=>Network saved at %s" % path)
             
             
             if frame_idx % params['max_tau'] == 0:

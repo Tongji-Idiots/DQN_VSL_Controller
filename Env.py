@@ -44,8 +44,8 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.lane_length = list()
         self.action_set = dict()
         #self.waiting_time = 0.0
-        self.delaytime = 0.0
-        self.saturation = 0.0
+        self.mergingspeed = 0.0
+        self.traveltime = 0.0
         self.death_factor = death_factor
         #self.ratio = 0.0
         self.meanspeed = 22.22
@@ -110,12 +110,12 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             print('Scenario ends... at phase %d' % (self.run_step / 1800 + 1))
             traci.close(False)
             return True
-        if self.run_step % 1800 == 0:
+        '''if self.run_step % 1800 == 0:
             self.death_factor -= self.death_factor / 5
         if self.death_factor < self.saturation:
-            print('You are jammed to Death! Scenario ends at phase %d' % (self.run_step / 1800 + 1))
+            print('Jammed to Death! Scenario ends at phase %d' % (self.run_step / 1800 + 1))
             traci.close(False)
-            return True
+            return True'''
         return False
 
     def warm_up_simulation(self):
@@ -184,36 +184,36 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         #print(state.shape)
         return state
     
-    def _delaytime(self):
+    def _getmergingspeed(self):
         ms = list()
-        for lane in self.lane_list:
-            ms.append(traci.lane.getLastStepMeanSpeed(lane))
+        for lane in self.lanearea_ob:
+            ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
         meanspeed = np.mean(ms)
-        targetspeed = 22.22
-        delaytime = np.sum(self.lane_length) * (1 / meanspeed - 1/targetspeed)
-        return delaytime
+        return meanspeed
     
-    def _getsaturation(self):
-        saturation = list()
+    def _gettotaltraveltime(self):
+        traveltime = list()
         for lane in self.lane_list:
-            saturation.append(traci.lane.getLastStepVehicleNumber(lane)/(traci.lane.getLength(lane) / 5))
-        ans = np.mean(saturation)
-        print("saturation:" + str(ans))
-        self.saturation = ans
+            if "merging" in lane:
+                traveltime.append(traci.lane.getLastStepVehicleNumber(lane)/(traci.lane.getLength(lane) / 5))
+        ttt = np.sum(traveltime)
+        #print("saturation:" + str(ans))
+        return ttt
 
-    def _transformedtanh(self, x):
-        return (np.exp(-x/4) - np.exp(x/4))/(np.exp(x/4) + np.exp(-x/4))
+    def _transformedtanh(self, x, alpha):
+        return (np.exp(-x/alpha) - np.exp(x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
+    
+    def _transformedsigmoid(self, x, alpha):
+        return 1/(1 + np.exp(x/alpha))
     
     def step_reward(self):
         #Using waiting_time to present reward.
-        delta_delay = self._delaytime() - self.delaytime
-        delay_reward = self._transformedtanh(delta_delay)
-        satur_discount = 1 + np.sign(delta_delay) * (self.death_factor - self.saturation) ** 2
-        self.delaytime = self._delaytime()
-        if self.saturation > 0.75:
-            reward = -1.0
+        if self._getmergingspeed() - self.mergingspeed > 0 or self._gettotaltraveltime() - self.traveltime > 0:
+            reward = -1
+        elif self._getmergingspeed() - self.mergingspeed < 0 or self._gettotaltraveltime() - self.traveltime < 0:
+            reward = 1
         else:
-            reward = 0.1 * delay_reward * satur_discount * 0.06
+            reward = 0
         return reward
     
     def reset_vehicle_maxspeed(self):
@@ -269,6 +269,10 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.warm_up_simulation()
 
         self.run_step = 0
+
+        self.traveltime = self._gettotaltraveltime()
+
+        self.mergingspeed = self._getmergingspeed()
 
         return self.update_observation()
     

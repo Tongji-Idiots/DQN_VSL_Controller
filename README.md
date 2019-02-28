@@ -293,3 +293,38 @@ Feb.22, 2019:
         reward += -(self._delaytime() - self.delaytime)
         self.delaytime = self._delaytime()
         return reward
+
+6.reward 
+def _getmergingspeed(self):
+        ms = list()
+        for lane in self.lanearea_ob:
+            ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
+        meanspeed = np.mean(ms)
+        return meanspeed
+    
+    def _getsaturation(self):
+        saturation = list()
+        for lane in self.lane_list:
+            saturation.append(traci.lane.getLastStepVehicleNumber(lane)/(traci.lane.getLength(lane) / 5))
+        ans = np.mean(saturation)
+        #print("saturation:" + str(ans))
+        self.saturation = ans
+
+    def _transformedtanh(self, x, alpha):
+        return (np.exp(-x/alpha) - np.exp(x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
+    
+    def _transformedsigmoid(self, x, alpha):
+        return 1/(1 + np.exp(x/alpha))
+    
+    def step_reward(self):
+        #Using waiting_time to present reward.
+        self._getsaturation()
+        delta_speed = self._getmergingspeed() - 22.22
+        speed_reward = 1.5 - self._transformedsigmoid(delta_speed, 1)
+        satur_discount = 2 * (0.75**2 - self.saturation ** 2)
+        self.mergingspeed = self._getmergingspeed()
+        if self.saturation >= 0.75 or self.mergingspeed <= 0.1:
+            reward = -1.0
+        else:
+            reward = 0.1 * speed_reward * np.clip(satur_discount, -1, 1) * 0.06
+        return reward
