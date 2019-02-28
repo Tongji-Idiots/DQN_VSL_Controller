@@ -8,13 +8,13 @@ Created on Sun Jan  6 13:36:09 2019
 # Import Modules
 import collections
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import pickle
 import os,sys
 sys.path.append("./lib")
 sys.path.append("./common")
+import time
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
 import Env as Env
 from torch.autograd import Variable
@@ -125,14 +125,14 @@ def load_model(net, path):
 # Training
 def Core():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(writer, frameskip= 10, death_factor= params['death_factor'])  ###This IO needs to be modified
+    env = Env.SumoEnv(frameskip= 10, death_factor= params['death_factor'])  ###This IO needs to be modified
     #env = env.unwrapped
     #print(env_traino.state_shape)
-    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 3, episodic_life= False, reward_clipping= True)  ###wrapper could be modified
+    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 3, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
     #print(env.action_space.n)
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
-    path = os.path.join('./runs/', 'checkpoint.pth')
+    path = os.path.join('./savednetwork/' + time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time())) + '/', 'checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
     if torch.cuda.is_available():
         d = int(input("Please choose device to run the programe (0 - cpu  1 - gpu): "))
@@ -145,7 +145,11 @@ def Core():
                 torch.set_default_tensor_type('torch.cuda.FloatTensor')
                 net.cuda(device)
                 torch.backends.cudnn.benchmark = True
-            print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
+                if next(net.parameters()).is_cuda:
+                    print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
+                else:
+                    device = torch.device('cpu')
+                    print("Couldn't transfer neural network to cuda. Now using CPU for training")
         else:
             device = torch.device('cpu')
             print("Now using CPU for training")
@@ -181,7 +185,7 @@ def Core():
     #Add graph at the first roll
     if frame_idx == 0:
         print("=> Loading Environment for neural network demonstration...")
-        envg = Env.SumoEnv(writer)
+        envg = Env.SumoEnv()
         envg = wrapper.wrap_dqn(envg, stack_frames = 3, episodic_life= False, reward_clipping= True) 
         print("=> Drawing neural network graph...")
         states = list()

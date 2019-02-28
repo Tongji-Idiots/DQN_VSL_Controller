@@ -16,22 +16,20 @@ from sumolib import checkBinary
 
 #Environment Constants
 STATE_SHAPE = (81, 441, 1)      
-WARM_UP_TIME = 3 * 1e2
-END_TIME = 100 * 1e2
+WARM_UP_TIME = 1 * 1e2
+TOTAL_TIME = 108 * 1e2
 VEHICLE_MEAN_LENGTH = 5
 speeds = [11.11, 13.89, 16.67, 19.44, 22.22]  # possible actions collection
 
 
 
 class SumoEnv(gym.Env):       ###It needs to be modified
-    def __init__(self, writer, frameskip= 10, death_factor= 0.001, demonstration = False):
+    def __init__(self, frameskip= 10, death_factor= 0.001, demonstration = False):
         #create environment
 
         self.warmstart = WARM_UP_TIME
-        self.warmend = END_TIME
         self.demonstration = demonstration
         self.frameskip = frameskip
-        self.writer = writer
 
         self.run_step = 0
         self.lane_list = list()
@@ -43,12 +41,9 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.lanearea_ob = list()
         self.lane_length = list()
         self.action_set = dict()
-        #self.waiting_time = 0.0
         self.mergingspeed = 0.0
         self.traveltime = 0.0
         self.death_factor = death_factor
-        #self.ratio = 0.0
-        self.meanspeed = 22.22
 
         # initialize sumo path
         
@@ -78,8 +73,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             else:
                 self.lanearea_ob.append(lanearea_dec.attrib["id"])
  
-         
-
         # initalize action set
         i = 0
         j = 0
@@ -96,7 +89,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
 
         # initialize vehicle_list and vehicle_position
         run_step = 0
-        while run_step< END_TIME + 2:
+        while run_step< TOTAL_TIME + 2:
             self.vehicle_list.append(dict())
             self.vehicle_position.append(dict())
             for lane in net_tree.iter("lane"):
@@ -106,22 +99,16 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             run_step += 1       
 
     def is_episode(self):
-        if self.run_step == END_TIME:
+        if self.run_step == TOTAL_TIME:
             print('Scenario ends... at phase %d' % (self.run_step / 1800 + 1))
             traci.close(False)
             return True
-        '''if self.run_step % 1800 == 0:
-            self.death_factor -= self.death_factor / 5
-        if self.death_factor < self.saturation:
-            print('Jammed to Death! Scenario ends at phase %d' % (self.run_step / 1800 + 1))
-            traci.close(False)
-            return True'''
         return False
 
     def warm_up_simulation(self):
         # Warm up simulation.
         warm_step=0
-        while warm_step < WARM_UP_TIME:
+        while warm_step <= WARM_UP_TIME:
             traci.simulationStep()
             warm_step += 1
     
@@ -142,7 +129,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
 
     def update_observation(self):
         # Update observation of environment state.
-
         self.update_target_vehicle_set()
         self.transform_vehicle_position()
 
@@ -181,7 +167,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             vehicle_acceleration[lane_index][vehicle_index] = traci.vehicle.getAcceleration(vehicle)
         state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
         state = np.swapaxes(state, 2, 0)
-        #print(state.shape)
         return state
     
     def _getmergingspeed(self):
@@ -197,7 +182,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             if "merging" in lane:
                 traveltime.append(traci.lane.getLastStepVehicleNumber(lane)/(traci.lane.getLength(lane) / 5))
         ttt = np.sum(traveltime)
-        #print("saturation:" + str(ans))
         return ttt
 
     def _transformedtanh(self, x, alpha):
@@ -209,9 +193,9 @@ class SumoEnv(gym.Env):       ###It needs to be modified
     def step_reward(self):
         #Using waiting_time to present reward.
         if self._getmergingspeed() - self.mergingspeed > 0 or self._gettotaltraveltime() - self.traveltime > 0:
-            reward = -1
+            reward = -0.0001
         elif self._getmergingspeed() - self.mergingspeed < 0 or self._gettotaltraveltime() - self.traveltime < 0:
-            reward = 1
+            reward = -0.0001
         else:
             reward = 0
         return reward
@@ -242,9 +226,9 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         for _ in range(num_steps):
             reward += self.step_reward()
             traci.simulationStep()
-            num_arrow = int(self.run_step * 50 / END_TIME)
+            num_arrow = int(self.run_step * 50 / TOTAL_TIME)
             num_line = 50 - num_arrow
-            percent = self.run_step * 100.0 / END_TIME
+            percent = self.run_step * 100.0 / TOTAL_TIME
             process_bar = 'Scenario Running... [' + '>' * num_arrow + '-' * num_line + ']' + '%.2f' % percent + '%' + '\r'
             sys.stdout.write(process_bar)
             sys.stdout.flush()
@@ -283,6 +267,3 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         # 2**31.
         seed2 = seeding.hash_seed(seed1 + 1) % 2**31
         return [seed1, seed2]
-
-    def render(self):
-        pass

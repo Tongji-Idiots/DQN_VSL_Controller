@@ -16,9 +16,9 @@ Constants = {
 
         # EXPLORATION HYPERPARAMETERS for epsilon greedy strategy
         'epsilon_frames':   12000, # frames over which to anneal epsilon
-        'epsilon_start':    0.99,   # exploration probability at start
-        'epsilon_final':    0.02,  # minimum exploration probability
-        'learning_rate':    0.02,  # exponential decay rate for exploration prob
+        'epsilon_start':    0.1,   # exploration probability at start
+        'epsilon_final':    0.001,  # minimum exploration probability
+        'learning_rate':    0.003,  # exponential decay rate for exploration prob
 
         #Prio-learning factors
         'PRIO_REPLAY_ALPHA': 0.6,
