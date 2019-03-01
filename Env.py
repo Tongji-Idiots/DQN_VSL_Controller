@@ -16,7 +16,7 @@ from sumolib import checkBinary
 
 #Environment Constants
 STATE_SHAPE = (81, 441, 1)      
-WARM_UP_TIME = 1 * 1e2
+WARM_UP_TIME = 2 * 1e2
 TOTAL_TIME = 108 * 1e2
 VEHICLE_MEAN_LENGTH = 5
 speeds = [11.11, 13.89, 16.67, 19.44, 22.22]  # possible actions collection
@@ -41,8 +41,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.lanearea_ob = list()
         self.lane_length = list()
         self.action_set = dict()
-        self.mergingspeed = 0.0
-        self.traveltime = 0.0
         self.death_factor = death_factor
 
         # initialize sumo path
@@ -184,20 +182,16 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         ttt = np.sum(traveltime)
         return ttt
 
-    def _transformedtanh(self, x, alpha):
+    def _transformedtanh(self, x, alpha=1):
         return (np.exp(-x/alpha) - np.exp(x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
     
-    def _transformedsigmoid(self, x, alpha):
+    def _transformedsigmoid(self, x, alpha=1):
         return 1/(1 + np.exp(x/alpha))
     
     def step_reward(self):
         #Using waiting_time to present reward.
-        if self._getmergingspeed() - self.mergingspeed > 0 or self._gettotaltraveltime() - self.traveltime > 0:
-            reward = -0.001
-        elif self._getmergingspeed() - self.mergingspeed < 0 or self._gettotaltraveltime() - self.traveltime < 0:
-            reward = -0.001
-        else:
-            reward = 0
+        reward = 0.0
+        reward += (self._transformedtanh((self._getmergingspeed()-12)*0.2) - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 20
         return reward
     
     def reset_vehicle_maxspeed(self):

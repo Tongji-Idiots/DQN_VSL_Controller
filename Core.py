@@ -124,10 +124,10 @@ def load_model(net, path):
 # Training
 def Core():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(frameskip= 10, death_factor= params['death_factor'])  ###This IO needs to be modified
+    env = Env.SumoEnv(frameskip= 5, death_factor= params['death_factor'])  ###This IO needs to be modified
     #env = env.unwrapped
     #print(env_traino.state_shape)
-    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 3, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
+    env = wrapper.wrap_dqn(env, skipframes= 3, stack_frames= 3, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
     #print(env.action_space.n)
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
@@ -196,7 +196,7 @@ def Core():
             print("=> Graph done!")
         envg.close()
 
-    with tracker.RewardTracker(writer, params['stop_reward'], params['stop_frame']) as reward_tracker:  #stop reward needs to be modified according to reward function
+    with tracker.RewardTracker(writer, params['stop_reward'], params['training_frame']) as reward_tracker:  #stop reward needs to be modified according to reward function
         while True:
             frame_idx += 1
             buffer.populate(1)
@@ -240,7 +240,7 @@ def Core():
             #saving model
             if new_rewards:
                 save_model(net, buffer, beta, optimizer, path, frame_idx)
-                print("\n=> Checkpoint reached.\n=>Network saved at %s" % path)
+                print("=> Checkpoint reached.\n=>Network saved at %s" % path)
             
             
             if frame_idx % params['max_tau'] == 0:

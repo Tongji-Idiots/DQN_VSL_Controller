@@ -25,7 +25,7 @@ class RewardTracker:
         self.ts_frame = frame
         self.ts = time.time()
         mean_reward = np.mean(self.total_rewards[-100:])
-        epsilon_str = "" if epsilon is None else ", epsilon %.2f" % epsilon
+        epsilon_str = "" if epsilon is None else ", epsilon %.4f" % epsilon
         print("%d: Just done %d episode(s), mean reward %d, speed %.2f f/s%s" % (
             frame, len(self.total_rewards),mean_reward, speed, epsilon_str
         ))
@@ -45,10 +45,10 @@ class EpsilonTracker:
     def __init__(self, epsilon_greedy_selector, params):
         self.epsilon_greedy_selector = epsilon_greedy_selector
         self.epsilon_start = params['epsilon_start']
-        self.epsilon_decay = params['epsilon_decay']
+        self.epsilon_frame = params['epsilon_frame']
         self.epsilon_final = params['epsilon_final']
         self.frame(0)
 
     def frame(self, frame):
         self.epsilon_greedy_selector.epsilon = \
-            max(self.epsilon_final, self.epsilon_start * self.epsilon_decay)
+            max(self.epsilon_final, self.epsilon_start - frame / self.epsilon_frame)

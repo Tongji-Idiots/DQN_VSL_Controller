@@ -11,31 +11,31 @@ Constants = {
 
         
         ### MEMORY HYPERPARAMETERS
-        'replay_size':      24000, # number of previous transitions to remember
-        'replay_initial':   8000,  #Timesteps to observe before training
+        'replay_size':      200, # number of previous transitions to remember
+        'replay_initial':   32,  #Timesteps to observe before training
 
         # EXPLORATION HYPERPARAMETERS for epsilon greedy strategy
-        'epsilon_decay':    0.99, # epsilon decay factor
+        'epsilon_frame':    51200, # epsilon decay factor
         'epsilon_start':    1,    # exploration probability at start
-        'epsilon_final':    0.1,  # minimum exploration probability
-        'learning_rate':    0.003,# exponential decay rate for exploration prob
+        'epsilon_final':    0.0,  # minimum exploration probability
+        'learning_rate':    0.001,# exponential decay rate for exploration prob
 
         #Prio-learning factors
         'PRIO_REPLAY_ALPHA': 0.6,
-        'BETA_START':  0.4,
-        'BETA_FRAMES': 24000,
+        'BETA_START':        0.4,
+        'BETA_FRAMES':       24000,
 
         # Q LEARNING hyperparameters
-        'gamma':            0.99,  # Discounting rate
+        'gamma':            0.95,  # Discounting rate
 
         ### TRAINING HYPERPARAMETERS
-        'stop_reward':      18000.0,   # Maximum reward to stop training
-        'stop_frame':       50000,  # Maximum timestep to stop training 
+        'stop_reward':      10.0,   # Maximum reward to stop training
+        'training_frame':   51200,  # Maximum timestep for stop training 
         'batch_size':       32,
         'death_factor':     0.75,  #Most acceptable congestion ratio
 
         # FIXED Q TARGETS HYPERPARAMETERS
-        'max_tau':          100   #Tau is the C step where we sync our target network   
+        'max_tau':          150   #Tau is the C step where we sync our target network   
         } 
            
 

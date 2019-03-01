@@ -52,6 +52,13 @@ for lanearea_dec in dec_tree.iter("laneAreaDetector"):
     else:
         lanearea_ob.append(lanearea_dec.attrib["id"])
 
+def warm_up_simulation():
+    # Warm up simulation.
+    warm_step=0
+    while warm_step <= 1 * 1e2:
+        traci.simulationStep()
+        warm_step += 1
+
 def _getmergingspeed():
     global lanearea_ob
     ms = list()
@@ -80,13 +87,17 @@ def _gettotaltraveltime():
     ans = np.sum((traveltime))
     #print("saturation:" + str(ans))
     return ans
-ttt_list = np.empty(15000, dtype= np.float32)
-for i in range(15000):
+ttt_list = np.empty(10800, dtype= np.float32)
+merging_speed = np.empty(10800, dtype = np.float32)
+warm_up_simulation()
+for i in range(10800):
     traci.simulationStep()
     ms = _getmergingspeed()
     sat = _getsaturation()
     ttt = _gettotaltraveltime()
     ttt_list[i] = ttt
-    print("Steps: %d" % i, "Meanspeed: %.2f" % ms, " Saturation: %.4f" % sat, " Total travel time: %.4f" % ttt)
-print("Maximum travel time: %.4f" % np.max(ttt_list))
+    merging_speed[i] = ms
+    #print("Steps: %d" % i, "Meanspeed: %.2f" % ms, " Saturation: %.4f" % sat, " Total travel time: %.4f" % ttt)
+print("Maximum travel time: %.4f" % np.max(ttt_list), " 75% travel time: " + str(np.percentile(ttt_list, 75)), \
+    " Maximum merging speed: %.2f" % np.max(merging_speed), " 75% merging speed: " + str(np.percentile(merging_speed, 75)))
 traci.close(False)
