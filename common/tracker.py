@@ -45,10 +45,10 @@ class EpsilonTracker:
     def __init__(self, epsilon_greedy_selector, params):
         self.epsilon_greedy_selector = epsilon_greedy_selector
         self.epsilon_start = params['epsilon_start']
+        self.epsilon_decay = params['epsilon_decay']
         self.epsilon_final = params['epsilon_final']
-        self.epsilon_frames = params['epsilon_frames']
         self.frame(0)
 
     def frame(self, frame):
         self.epsilon_greedy_selector.epsilon = \
-            max(self.epsilon_final, self.epsilon_start - frame / self.epsilon_frames)
+            max(self.epsilon_final, self.epsilon_start * self.epsilon_decay)

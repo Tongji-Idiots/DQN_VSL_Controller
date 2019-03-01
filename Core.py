@@ -11,7 +11,6 @@ import numpy as np
 import os,sys
 sys.path.append("./lib")
 sys.path.append("./common")
-import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -132,7 +131,7 @@ def Core():
     #print(env.action_space.n)
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
-    path = os.path.join('./savednetwork/' + time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time())) + '/', 'checkpoint.pth')
+    path = os.path.join('./savednetwork/', 'checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
     if torch.cuda.is_available():
         d = int(input("Please choose device to run the programe (0 - cpu  1 - gpu): "))

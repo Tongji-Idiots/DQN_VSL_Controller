@@ -193,9 +193,9 @@ class SumoEnv(gym.Env):       ###It needs to be modified
     def step_reward(self):
         #Using waiting_time to present reward.
         if self._getmergingspeed() - self.mergingspeed > 0 or self._gettotaltraveltime() - self.traveltime > 0:
-            reward = -0.0001
+            reward = -0.001
         elif self._getmergingspeed() - self.mergingspeed < 0 or self._gettotaltraveltime() - self.traveltime < 0:
-            reward = -0.0001
+            reward = -0.001
         else:
             reward = 0
         return reward
