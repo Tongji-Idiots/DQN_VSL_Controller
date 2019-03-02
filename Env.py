@@ -2,17 +2,23 @@
 import numpy as np
 import os,sys
 sys.path.append("./lib")
+if 'SUMO_HOME' in os.environ:
+    tools = os.path.join(os.environ['SUMO_HOME'],'tools')
+    sys.path.append(tools)
+else:
+    sys.exit("please declare environment variable 'SUMO_HOME'")
 import xml.etree.ElementTree as ET
 
 import cmath
 import gym
-import traci
 import torch
 from gym import error, spaces
 from gym import utils
 from gym.utils import seeding
 from collections import deque
+import traci
 from sumolib import checkBinary
+from multiprocessing import Pool, Process
 
 #Environment Constants
 STATE_SHAPE = (81, 441, 1)      
@@ -30,7 +36,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.warmstart = WARM_UP_TIME
         self.demonstration = demonstration
         self.frameskip = frameskip
-
         self.run_step = 0
         self.lane_list = list()
         self.edge_list = list()
@@ -42,20 +47,15 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.lane_length = list()
         self.action_set = dict()
         self.death_factor = death_factor
+        self.pool = Pool()
+        self.obs = list()
 
         # initialize sumo path
-        
-        if 'SUMO_HOME' in os.environ:
-            tools = os.path.join(os.environ['SUMO_HOME'],'tools')
-            sys.path.append(tools)
-        else:
-            sys.exit("please declare environment variable 'SUMO_HOME'")
-
         self.sumoBinary = " "
-        self.projectFile = './project/'    
+        self.projectFile = './Project/'    
 
         # initialize lane_list and edge_list
-        net_tree = ET.parse("./project/ramp.net.xml")
+        net_tree = ET.parse("./Project/ramp.net.xml")
         for lane in net_tree.iter("lane"):
             self.lane_list.append(lane.attrib["id"])
             self.lane_length.append(float(lane.attrib["length"]))
@@ -63,7 +63,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         self.observation_space = spaces.Box(low= -1, high=100, shape=(3 * len(self.lane_list), 441, 1), dtype=np.float32)
 
         # initialize lanearea_dec_list
-        dec_tree = ET.parse("./project/ramp.add.xml")
+        dec_tree = ET.parse("./Project/ramp.add.xml")
         for lanearea_dec in dec_tree.iter("laneAreaDetector"):
             if lanearea_dec.attrib["freq"] == '60':
                 self.lanearea_dec_list.append(lanearea_dec.attrib["id"])
@@ -99,7 +99,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
     def is_episode(self):
         if self.run_step == TOTAL_TIME:
             print('Scenario ends... at phase %d' % (self.run_step / 1800 + 1))
-            traci.close(False)
+            self.close()
             return True
         return False
 
@@ -125,11 +125,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
                 self.vehicle_position[self.run_step][lane][index]=1
         return [self.lane_list, self.vehicle_position]
 
-    def update_observation(self):
-        # Update observation of environment state.
-        self.update_target_vehicle_set()
-        self.transform_vehicle_position()
-
+    def update_task(self):
         lane_map = [0] * len(self.lane_list)
         i=0
         for lane in self.lane_list:
@@ -139,9 +135,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         vehicle_position = np.zeros((len(self.lane_list),441),dtype = np.float32)
         vehicle_speed = np.zeros((len(self.lane_list),441),dtype = np.float32)
         vehicle_acceleration = np.zeros((len(self.lane_list),441),dtype = np.float32)
-        state = np.empty((1, 3* len(self.lane_list), 441), dtype = np.float32)
-        #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
-    
+
         for lane in self.lane_list:
             lane_index = lane_map.index(lane)
             lane_len = traci.lane.getLength(lane)
@@ -163,7 +157,18 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             vehicle_position[lane_index][vehicle_index] = 1.0
             vehicle_speed[lane_index][vehicle_index] = traci.vehicle.getSpeed(vehicle) 
             vehicle_acceleration[lane_index][vehicle_index] = traci.vehicle.getAcceleration(vehicle)
-        state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
+        self.obs = [vehicle_position, vehicle_speed, vehicle_acceleration]
+    
+    def update_observation(self):
+        # Update observation of environment state.
+        self.pool.apply_async(self.update_target_vehicle_set())
+        self.pool.apply_async(self.transform_vehicle_position())
+
+        state = np.empty((1, 3* len(self.lane_list), 441), dtype = np.float32)
+        #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
+    
+        self.pool.apply_async(self.update_task())
+        state[0] = np.concatenate((self.obs[0], self.obs[1], self.obs[2]), axis= 0)
         state = np.swapaxes(state, 2, 0)
         return state
     
@@ -191,7 +196,9 @@ class SumoEnv(gym.Env):       ###It needs to be modified
     def step_reward(self):
         #Using waiting_time to present reward.
         reward = 0.0
-        reward += (self._transformedtanh((self._getmergingspeed()-12)*0.2) - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 2
+        
+        reward += (self._transformedtanh((self._getmergingspeed()-12)*0.2) \
+                   - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 2
         return reward
     
     def reset_vehicle_maxspeed(self):
@@ -206,30 +213,32 @@ class SumoEnv(gym.Env):       ###It needs to be modified
             for vehicle in vehicle_list:
                 traci.vehicle.setMaxSpeed(vehicle,max_speed)
 
+    def status(self):
+        num_arrow = int(self.run_step * 50 / TOTAL_TIME)
+        num_line = 50 - num_arrow
+        percent = self.run_step * 100.0 / TOTAL_TIME
+        process_bar = 'Scenario Running... [' + '>' * num_arrow + '-' * num_line + ']' + '%.2f' % percent + '%' + '\r'
+        sys.stdout.write(process_bar)
+        sys.stdout.flush()
+    
     def step(self, a):
         # Conduct action, update observation and collect reward.
         reward = 0.0
         action = self.action_set[a]
         for i in range(3):
             self.lanearea_max_speed[action[0][i]]=action[1]
-        self.reset_vehicle_maxspeed()
         if isinstance(self.frameskip, int):
             num_steps = self.frameskip
         else:
             num_steps = self.np_random.randint(self.frameskip[0], self.frameskip[1])
         for _ in range(num_steps):
-            reward += self.step_reward()
+            self.pool.apply_async(self.reset_vehicle_maxspeed())
             traci.simulationStep()
-            num_arrow = int(self.run_step * 50 / TOTAL_TIME)
-            num_line = 50 - num_arrow
-            percent = self.run_step * 100.0 / TOTAL_TIME
-            process_bar = 'Scenario Running... [' + '>' * num_arrow + '-' * num_line + ']' + '%.2f' % percent + '%' + '\r'
-            sys.stdout.write(process_bar)
-            sys.stdout.flush()
+            reward += self.step_reward()
+            self.status()
             self.run_step += 1
         observation = self.update_observation()
-        #print("reward:" + str(np.mean(np.clip(reward, -1, 1))))
-        return observation, reward, self.is_episode(), {'No info'}
+        return observation, reward / num_steps, self.is_episode(), {'No info'}
 
     def reset(self):
         # Reset simulation with the random seed randomly selected the pool.
@@ -248,10 +257,6 @@ class SumoEnv(gym.Env):       ###It needs to be modified
 
         self.run_step = 0
 
-        self.traveltime = self._gettotaltraveltime()
-
-        self.mergingspeed = self._getmergingspeed()
-
         return self.update_observation()
     
     def seed(self, seed= None):
@@ -261,3 +266,8 @@ class SumoEnv(gym.Env):       ###It needs to be modified
         # 2**31.
         seed2 = seeding.hash_seed(seed1 + 1) % 2**31
         return [seed1, seed2]
+    
+    def close(self):
+        self.pool.close()
+        self.pool.join()
+        traci.close(False)

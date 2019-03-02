@@ -8,4 +8,16 @@
     <laneAreaDetector id="merging_2" lane="merging_2" pos="0" freq="1200" length="129.5" file=".\Output\ramp_eval.out"/>
     <laneAreaDetector id="merging_3" lane="merging_3" pos="0" freq="1200" length="129.5" file=".\Output\ramp_eval.out"/>
 
+    <variableSpeedSign id="VSS_ID_0" lanes="mainline_up_0">
+    <step time="15" speed="22.22"/>
+    </variableSpeedSign>
+
+    <variableSpeedSign id="VSS_ID_1" lanes="mainline_up_1">
+    <step time="15" speed="22.22"/>
+    </variableSpeedSign>
+
+    <variableSpeedSign id="VSS_ID_2" lanes="mainline_up_2">
+    <step time="15" speed="22.22"/>
+    </variableSpeedSign>   
+
 </additional>

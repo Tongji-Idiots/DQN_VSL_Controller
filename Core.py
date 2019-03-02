@@ -124,36 +124,24 @@ def load_model(net, path):
 # Training
 def Core():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(frameskip= 5, death_factor= params['death_factor'])  ###This IO needs to be modified
+    env = Env.SumoEnv(frameskip= 15, death_factor= params['death_factor'])  ###This IO needs to be modified
     #env = env.unwrapped
     #print(env_traino.state_shape)
-    env = wrapper.wrap_dqn(env, skipframes= 3, stack_frames= 3, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
+    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 1, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
     #print(env.action_space.n)
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
     path = os.path.join('./savednetwork/', 'checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
-        d = int(input("Please choose device to run the programe (0 - cpu  1 - gpu): "))
-        if d != 0:
-            c = input("Please assign a gpu core (int, <" + str(torch.cuda.device_count()) + "): ")
-            gpu = int(c) if c is not '' else 0
-            device = torch.device('cuda:' + str(gpu))
-            if gpu is not None:
-                torch.cuda.set_device(gpu)
-                torch.set_default_tensor_type('torch.cuda.FloatTensor')
-                net.cuda(device)
-                torch.backends.cudnn.benchmark = True
-                if next(net.parameters()).is_cuda:
-                    print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
-                else:
-                    device = torch.device('cpu')
-                    print("Couldn't transfer neural network to cuda. Now using CPU for training")
-        else:
-            device = torch.device('cpu')
-            print("Now using CPU for training")
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        net.cuda()
+        torch.backends.cudnn.benchmark = True
+    if next(net.parameters()).is_cuda:
+        print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
     else:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
         print("Now using CPU for training")
     
     print("Observation space:", env.observation_space.shape, " Action size:", env.action_space.n)
@@ -185,7 +173,7 @@ def Core():
     if frame_idx == 0:
         print("=> Loading Environment for neural network demonstration...")
         envg = Env.SumoEnv()
-        envg = wrapper.wrap_dqn(envg, stack_frames = 3, episodic_life= False, reward_clipping= True) 
+        envg = wrapper.wrap_dqn(envg, stack_frames = 1, episodic_life= False, reward_clipping= True) 
         print("=> Drawing neural network graph...")
         states = list()
         states.append(envg.reset())
@@ -247,4 +235,11 @@ def Core():
                 tgt_net.sync()  #Sync q_eval and q_target
 
 if __name__ == '__main__':
+    if 'SUMO_HOME' in os.environ:
+        tools = os.path.join(os.environ['SUMO_HOME'],'tools')
+        sys.path.append(tools)
+    else:
+        sys.exit("please declare environment variable 'SUMO_HOME'")
+    import traci
+    from sumolib import checkBinary
     Core()
