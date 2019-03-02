@@ -191,7 +191,7 @@ class SumoEnv(gym.Env):       ###It needs to be modified
     def step_reward(self):
         #Using waiting_time to present reward.
         reward = 0.0
-        reward += (self._transformedtanh((self._getmergingspeed()-12)*0.2) - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 20
+        reward += (self._transformedtanh((self._getmergingspeed()-12)*0.2) - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 2
         return reward
     
     def reset_vehicle_maxspeed(self):

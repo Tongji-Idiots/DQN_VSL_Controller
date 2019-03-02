@@ -59,7 +59,7 @@ class DuelingNetwork(nn.Module):
         return int(np.prod(o.size()))
 
     def forward(self, x):
-        fx = x.float()/100
+        fx = x.float() / 100
         conv_out = self.convolutional_Layer(fx).view(fx.size()[0], -1)
         val = self.fully_connected_val(conv_out)
         adv = self.fully_connected_adv(conv_out)
@@ -91,7 +91,7 @@ class DQN(nn.Module):
         return int(np.prod(o.size()))
 
     def forward(self, x):
-        fx = x.float()
+        fx = x.float() / 100
         conv_out = self.conv(fx).view(fx.size()[0], -1)
         return self.fc(conv_out)
 
