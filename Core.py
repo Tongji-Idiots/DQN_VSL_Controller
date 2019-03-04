@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-import Env as Env
+import env as Env
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 from common import action, agent, utils, experience, tracker
@@ -126,7 +126,7 @@ def load_model(net, path_net, path_buffer):
 	return net, frame + 1, buffer, priorities, pos, optimizer
 
 # Training
-def Core():   
+def Train():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
     env = Env.SumoEnv(frameskip= 15, stackframes= 3)
     env.unwrapped
@@ -171,7 +171,7 @@ def Core():
             optimizer = optim.Adam(net.parameters(), lr=params['learning_rate'])
             print("=> No such checkpoint at '{}'".format(path_net))
 
-    with tracker.RewardTracker(writer, params['stop_reward'], params['training_frame']) as reward_tracker:  #stop reward needs to be modified according to reward function
+    with tracker.RewardTracker(writer, params['stop_reward']) as reward_tracker:  #stop reward needs to be modified according to reward function
         while True:
             frame_idx += 1
             buffer.populate(1)
@@ -222,4 +222,4 @@ def Core():
                 tgt_net.sync()  #Sync q_eval and q_target
 
 if __name__ == '__main__':
-    Core()
+    Train()

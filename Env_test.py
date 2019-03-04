@@ -13,8 +13,6 @@ from gym.utils import seeding
 from collections import deque
 from sumolib import checkBinary
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
-
 def seed(seed= None):
     np_random, seed1 = seeding.np_random(seed)
     # Derive a random seed. This gets passed as a uint, but gets
@@ -35,7 +33,6 @@ traci.start([sumoBinary, '-c', projectFile + 'ramp.sumo.cfg', '--start','--seed'
 scenario = traci.getConnection('training')
 
 # initialize lane_list and edge_list
-pool = Pool()
 lane_list = list()
 lane_length = list()
 lanearea_dec_list = list()
@@ -104,15 +101,14 @@ def reset_vehicle_maxspeed(vsl):
 ttt_list = list()
 merging_speed = list()
 warm_up_simulation()
-for i in range(720):
-    pool.apply_async(reset_vehicle_maxspeed(4.0))
-    for _ in range(15):
-        traci.simulationStep()
-        ms = pool.apply_async(_getmergingspeed()).get()
-        sat = pool.apply_async(_getsaturation()).get()
-        ttt = pool.apply_async(_gettotaltraveltime()).get()
-        ttt_list.append(ttt)
-        merging_speed.append(ms)
+for i in range(10800):
+    #pool.apply_async(reset_vehicle_maxspeed(4.0))
+    traci.simulationStep()
+    ms = _getmergingspeed()
+    sat = _getsaturation()
+    ttt = _gettotaltraveltime()
+    ttt_list.append(ttt)
+    merging_speed.append(ms)
     num_arrow = int(i * 50 / 10800)
     num_line = 50 - num_arrow
     percent = i * 100.0 / 10800
@@ -120,8 +116,9 @@ for i in range(720):
     sys.stdout.write(process_bar)
     sys.stdout.flush()
     #print("Steps: %d" % i, "Meanspeed: %.2f" % ms, " Saturation: %.4f" % sat, " Total travel time: %.4f" % ttt)
-print("Maximum travel time: %.4f" % np.max(ttt_list), " 90% travel time: " + str(np.percentile(ttt_list, 90)), \
-    " Maximum merging speed: %.2f" % np.max(merging_speed), " 75% merging speed: " + str(np.percentile(merging_speed, 75)))
-plt.hist(merging_speed)
+print("Maximum travel time: %.4f" % np.max(ttt_list), " median travel time: " + str(np.median(ttt_list)), \
+    " Maximum merging speed: %.2f" % np.max(merging_speed), " median merging speed: " + str(np.median(merging_speed)))
+x = range(10800)
+plt.plot(x, merging_speed)
 plt.show()
 traci.close(False)

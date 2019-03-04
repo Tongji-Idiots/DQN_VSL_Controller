@@ -48,9 +48,9 @@ class SumoEnv(gym.Env):
     __slots__ = 'demonstration', 'frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
         'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'lane_length', 'action_set', \
             'death_factor', 'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'stackframes'
-    def __init__(self, frameskip= 10, stackframes=1, demonstration = False):
+    def __init__(self, frameskip= 10, stackframes=1):
         #create environment
-        self.demonstration = demonstration
+        
         self.frameskip = frameskip
         self.run_step = 0
         self.lane_list = list()
@@ -197,8 +197,8 @@ class SumoEnv(gym.Env):
     
     def step_reward(self):
         #Using waiting_time to present reward.
-        return (self._transformedtanh((self._getmergingspeed()-12)*0.2) \
-             - self._transformedtanh((self._gettotaltraveltime()-33)*0.08)) / 2
+        return (self._transformedtanh((self._getmergingspeed()-12)*0.4) \
+             - self._transformedtanh((self._gettotaltraveltime()-27)*0.4)) / 2
     
     def reset_vehicle_maxspeed(self):
         for lane in self.lane_list:
@@ -248,16 +248,11 @@ class SumoEnv(gym.Env):
     def reset(self):
         # Reset simulation with the random seed randomly selected the pool.
         self.frames.clear()
-        if self.demonstration == False:
-            self.sumoBinary = "sumo"
-            seed = self.seed()[1]
-            traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed', str(seed), '--quit-on-end'], label='training')
-            self.scenario = traci.getConnection('training')
-        else:
-            self.sumoBinary = "sumo-gui"
-            seed = self.seed()[1]
-            traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed', str(seed), '--quit-on-end'], label='demonstration')
-            self.scenario = traci.getConnection('demonstration')
+
+        self.sumoBinary = "sumo"
+        seed = self.seed()[1]
+        traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed', str(seed), '--quit-on-end'], label='training')
+        self.scenario = traci.getConnection('training')
 
         self.warm_up_simulation()
 
