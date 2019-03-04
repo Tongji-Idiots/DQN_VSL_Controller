@@ -2,7 +2,6 @@ import gym
 import torch
 import random
 import collections
-import utils
 from torch.autograd import Variable
 
 import numpy as np
@@ -87,7 +86,7 @@ class ExperienceSource:
             grouped_actions = _group_list(actions, env_lens)
 
             global_ofs = 0
-            for env_idx, (env, action_n) in enumerate(zip(self.pool, grouped_actions)):
+            for _, (env, action_n) in enumerate(zip(self.pool, grouped_actions)):
                 if self.vectorized:
                     next_state_n, r_n, is_done_n, _ = env.step(action_n)
                 else:
@@ -408,62 +407,6 @@ class PrioReplayBufferNaive:
             self.priorities[idx] = prio
 
 
-class PrioritizedReplayBuffer(ExperienceReplayBuffer):
-    def __init__(self, experience_source, buffer_size, alpha):
-        super(PrioritizedReplayBuffer, self).__init__(experience_source, buffer_size)
-        assert alpha > 0
-        self._alpha = alpha
-
-        it_capacity = 1
-        while it_capacity < buffer_size:
-            it_capacity *= 2
-
-        self._it_sum = utils.SumSegmentTree(it_capacity)
-        self._it_min = utils.MinSegmentTree(it_capacity)
-        self._max_priority = 1.0
-
-    def _add(self, *args, **kwargs):
-        idx = self.pos
-        super()._add(*args, **kwargs)
-        self._it_sum[idx] = self._max_priority ** self._alpha
-        self._it_min[idx] = self._max_priority ** self._alpha
-
-    def _sample_proportional(self, batch_size):
-        res = []
-        for _ in range(batch_size):
-            mass = random.random() * self._it_sum.sum(0, len(self) - 1)
-            idx = self._it_sum.find_prefixsum_idx(mass)
-            res.append(idx)
-        return res
-
-    def sample(self, batch_size, beta):
-        assert beta > 0
-
-        idxes = self._sample_proportional(batch_size)
-
-        weights = []
-        p_min = self._it_min.min() / self._it_sum.sum()
-        max_weight = (p_min * len(self)) ** (-beta)
-
-        for idx in idxes:
-            p_sample = self._it_sum[idx] / self._it_sum.sum()
-            weight = (p_sample * len(self)) ** (-beta)
-            weights.append(weight / max_weight)
-        weights = np.array(weights, dtype=np.float32)
-        samples = [self.buffer[idx] for idx in idxes]
-        return samples, idxes, weights
-
-    def update_priorities(self, idxes, priorities):
-        assert len(idxes) == len(priorities)
-        for idx, priority in zip(idxes, priorities):
-            assert priority > 0
-            assert 0 <= idx < len(self)
-            self._it_sum[idx] = priority ** self._alpha
-            self._it_min[idx] = priority ** self._alpha
-
-            self._max_priority = max(self._max_priority, priority)
-
-
 class BatchPreprocessor:
     """
     Abstract preprocessor class descendants to which converts experience
@@ -471,109 +414,6 @@ class BatchPreprocessor:
     """
     def preprocess(self, batch):
         raise NotImplementedError
-
-
-class QLearningPreprocessor(BatchPreprocessor):
-    """
-    Supports SimpleDQN, TargetDQN, DoubleDQN and can additionally feed TD-error back to
-    experience replay buffer.
-
-    To use different modes, use appropriate class method
-    """
-    def __init__(self, model, target_model, use_double_dqn=False, batch_td_error_hook=None, gamma=0.99, device="cpu"):
-        self.model = model
-        self.target_model = target_model
-        self.use_double_dqn = use_double_dqn
-        self.batch_dt_error_hook = batch_td_error_hook
-        self.gamma = gamma
-        self.device = device
-
-    @staticmethod
-    def simple_dqn(model, **kwargs):
-        return QLearningPreprocessor(model=model, target_model=None, use_double_dqn=False, **kwargs)
-
-    @staticmethod
-    def target_dqn(model, target_model, **kwards):
-        return QLearningPreprocessor(model, target_model, use_double_dqn=False, **kwards)
-
-    @staticmethod
-    def double_dqn(model, target_model, **kwargs):
-        return QLearningPreprocessor(model, target_model, use_double_dqn=True, **kwargs)
-
-    def _calc_Q(self, states_first, states_last):
-        """
-        Calculates apropriate q values for first and last states. Way of calculate depends on our settings.
-        :param states_first: numpy array of first states
-        :param states_last: numpy array of last states
-        :return: tuple of numpy arrays of q values
-        """
-        # here we need both first and last values calculated using our main model, so we
-        # combine both states into one batch for efficiency and separate results later
-        if self.target_model is None or self.use_double_dqn:
-            states_t = torch.tensor(np.concatenate((states_first, states_last), axis=0)).to(self.device)
-            res_both = self.model(states_t).data.cpu().numpy()
-            return res_both[:len(states_first)], res_both[len(states_first):]
-
-        # in this case we have target_model set and use_double_dqn==False
-        # so, we should calculate first_q and last_q using different models
-        states_first_v = torch.tensor(states_first).to(self.device)
-        states_last_v = torch.tensor(states_last).to(self.device)
-        q_first = self.model(states_first_v).data
-        q_last = self.target_model(states_last_v).data
-        return q_first.cpu().numpy(), q_last.cpu().numpy()
-
-    def _calc_target_rewards(self, states_last, q_last):
-        """
-        Calculate rewards from final states according to variants from our construction:
-        1. simple DQN: max(Q(states, model))
-        2. target DQN: max(Q(states, target_model))
-        3. double DQN: Q(states, target_model)[argmax(Q(states, model)]
-        :param states_last: numpy array of last states from the games
-        :param q_last: numpy array of last q values
-        :return: vector of target rewards
-        """
-        # in this case we handle both simple DQN and target DQN
-        if self.target_model is None or not self.use_double_dqn:
-            return q_last.max(axis=1)
-
-        # here we have target_model set and use_double_dqn==True
-        actions = q_last.argmax(axis=1)
-        # calculate Q values using target net
-        states_last_v = torch.tensor(states_last).to(self.device)
-        q_last_target = self.target_model(states_last_v).data.cpu().numpy()
-        return q_last_target[range(q_last_target.shape[0]), actions]
-
-    def preprocess(self, batch):
-        """
-        Calculates data for Q learning from batch of observations
-        :param batch: list of lists of Experience objects
-        :return: tuple of numpy arrays:
-            1. states -- observations
-            2. target Q-values
-            3. vector of td errors for every batch entry
-        """
-        # first and last states for every entry
-        state_0 = np.array([exp[0].state for exp in batch], dtype=np.float32)
-        state_L = np.array([exp[-1].state for exp in batch], dtype=np.float32)
-
-        q0, qL = self._calc_Q(state_0, state_L)
-        rewards = self._calc_target_rewards(state_L, qL)
-
-        td = np.zeros(shape=(len(batch),))
-
-        for idx, (total_reward, exps) in enumerate(zip(rewards, batch)):
-            # game is done, no final reward
-            if exps[-1].done:
-                total_reward = 0.0
-            for exp in reversed(exps[:-1]):
-                total_reward *= self.gamma
-                total_reward += exp.reward
-            # update total reward and calculate td error
-            act = exps[0].action
-            td[idx] = q0[idx][act] - total_reward
-            q0[idx][act] = total_reward
-
-        return state_0, q0, td
 
 
 class PrioReplayBuffer:

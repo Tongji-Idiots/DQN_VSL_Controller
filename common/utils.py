@@ -35,7 +35,7 @@ Constants = {
         'death_factor':     0.75,  #Most acceptable congestion ratio
 
         # FIXED Q TARGETS HYPERPARAMETERS
-        'max_tau':          90   #Tau is the C step where we sync our target network   
+        'max_tau':          150   #Tau is the C step where we sync our target network   
         } 
            
 

@@ -17,3 +17,4 @@ Project/Output/ramp_eval.out
 runs/checkpoint.pth
 savednetwork/2019-02-28-16-17-28/checkpoint.pth
 savednetwork/2019-03-01-07-35-59/checkpoint.pth
+*.log

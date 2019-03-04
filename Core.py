@@ -18,7 +18,8 @@ import torch.optim as optim
 import Env as Env
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
-from common import action, agent, utils, experience, tracker, wrapper
+from common import action, agent, utils, experience, tracker
+from multiprocessing import Pool
 
 # Global Variable:
 #parser.add_argument("--resume", default = None, type = str, metavar= path, help= 'path to latest checkpoint')
@@ -96,42 +97,43 @@ class DQN(nn.Module):
         return self.fc(conv_out)
 
 # Saving model
-def save_model(net, buffer, beta, optim, path, frame):
+def save_model(net, buffer, beta, optim, path_net, path_buffer, frame):
 	torch.save({
 		'frame': frame,
 		'state_dict': net.state_dict(),
+        #optimizer:
+		'optimizer': optim},
+		path_net)
+	torch.save({
         #prioritized replay params:
         'buffer': buffer.buffer,
         'priorities': buffer.priorities,
-        'pos': buffer.pos,
-        #optimizer:
-		'optimizer': optim},
-		path)
+        'pos': buffer.pos},
+        path_buffer)
 
 # Load pretrained model
-def load_model(net, path):
-	state_dict = torch.load(path)
+def load_model(net, path_net, path_buffer):
+	state_dict = torch.load(path_net)
 	net.load_state_dict(state_dict['state_dict'])
 	frame = state_dict['frame']
-	print("Having pre-trained %d frames." % frame)
-	buffer = state_dict['buffer']
-	priorities = state_dict['priorities']
-	pos = state_dict['pos']
 	optimizer = state_dict['optimizer']
+	print("Having pre-trained %d frames." % frame)
+	buffer_dict = torch.load(path_buffer)
+	buffer = buffer_dict['buffer']
+	priorities = buffer_dict['priorities']
+	pos = buffer_dict['pos']
 	net.train()
 	return net, frame + 1, buffer, priorities, pos, optimizer
 
 # Training
 def Core():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(frameskip= 15, death_factor= params['death_factor'])  ###This IO needs to be modified
-    #env = env.unwrapped
-    #print(env_traino.state_shape)
-    env = wrapper.wrap_dqn(env, skipframes= 1, stack_frames= 1, episodic_life= False, reward_clipping= False)  ###wrapper could be modified
-    #print(env.action_space.n)
+    env = Env.SumoEnv(frameskip= 15, stackframes= 3)
+    env.unwrapped
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
-    path = os.path.join('./savednetwork/', 'checkpoint.pth')
+    path_net = os.path.join('./savednetwork/', 'network_checkpoint.pth')
+    path_buffer = os.path.join('./savednetwork/', 'buffer_checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
@@ -144,7 +146,7 @@ def Core():
         device = torch.device("cpu")
         print("Now using CPU for training")
     
-    print("Observation space:", env.observation_space.shape, " Action size:", env.action_space.n)
+    print("Observation space: {}, Action size:{}".format(env.observation_space.shape,env.action_space.n))
 
     tgt_net = agent.TargetNet(net)
     selector = action.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
@@ -160,29 +162,14 @@ def Core():
     beta = params['BETA_START']
 
     #Load previous network
-    if path:
-        if os.path.isfile(path):
-            print("=> Loading checkpoint '{}'".format(path))
-            net, frame_idx, buffer.buffer, buffer.priorities, buffer.pos, optimizer = load_model(net, path)
+    if path_net and path_buffer:
+        if os.path.isfile(path_net) and os.path.isfile(path_buffer):
+            print("=> Loading checkpoint '{}'".format(path_net))
+            net, frame_idx, buffer.buffer, buffer.priorities, buffer.pos, optimizer = load_model(net, path_net, path_buffer)
             print("Checkpoint loaded successfully! ")
         else:
             optimizer = optim.Adam(net.parameters(), lr=params['learning_rate'])
-            print("=> No such checkpoint at '{}'".format(path))
-    
-    #Add graph at the first roll
-    if frame_idx == 0:
-        print("=> Loading Environment for neural network demonstration...")
-        envg = Env.SumoEnv()
-        envg = wrapper.wrap_dqn(envg, stack_frames = 1, episodic_life= False, reward_clipping= True) 
-        print("=> Drawing neural network graph...")
-        states = list()
-        states.append(envg.reset())
-        states = agent.default_states_preprocessor(states)
-        if torch.is_tensor(states):
-            states = states.to(device)
-            writer.add_graph(net, states)
-            print("=> Graph done!")
-        envg.close()
+            print("=> No such checkpoint at '{}'".format(path_net))
 
     with tracker.RewardTracker(writer, params['stop_reward'], params['training_frame']) as reward_tracker:  #stop reward needs to be modified according to reward function
         while True:
@@ -223,23 +210,16 @@ def Core():
             #Writer function -> Tensorboard file
             writer.add_scalar("Train/Loss", loss_v, frame_idx)
             for name, netparam in net.named_parameters():
-                    writer.add_histogram('Model/' + name, netparam.clone().cpu().data.numpy(), frame_idx)
+                    writer.add_histogram('Model/{}'.format(name), netparam.clone().cpu().data.numpy(), frame_idx)
             
             #saving model
             if new_rewards:
-                save_model(net, buffer, beta, optimizer, path, frame_idx)
-                print("=> Checkpoint reached.\n=>Network saved at %s" % path)
+                save_model(net, buffer, beta, optimizer, path_net, path_buffer, frame_idx)
+                print("=> Checkpoint reached.\n=>Network saved at %s" % path_net)
             
             
             if frame_idx % params['max_tau'] == 0:
                 tgt_net.sync()  #Sync q_eval and q_target
 
 if __name__ == '__main__':
-    if 'SUMO_HOME' in os.environ:
-        tools = os.path.join(os.environ['SUMO_HOME'],'tools')
-        sys.path.append(tools)
-    else:
-        sys.exit("please declare environment variable 'SUMO_HOME'")
-    import traci
-    from sumolib import checkBinary
     Core()

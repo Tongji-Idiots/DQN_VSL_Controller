@@ -13,6 +13,7 @@ from gym.utils import seeding
 from collections import deque
 from sumolib import checkBinary
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 
 def seed(seed= None):
     np_random, seed1 = seeding.np_random(seed)
@@ -34,6 +35,7 @@ traci.start([sumoBinary, '-c', projectFile + 'ramp.sumo.cfg', '--start','--seed'
 scenario = traci.getConnection('training')
 
 # initialize lane_list and edge_list
+pool = Pool()
 lane_list = list()
 lane_length = list()
 lanearea_dec_list = list()
@@ -99,17 +101,18 @@ def reset_vehicle_maxspeed(vsl):
         for vehicle in vehicle_list:
             traci.vehicle.setMaxSpeed(vehicle,max_speed)
 
-ttt_list = np.empty(10800, dtype= np.float32)
-merging_speed = np.empty(10800, dtype = np.float32)
+ttt_list = list()
+merging_speed = list()
 warm_up_simulation()
-for i in range(10800):
-    reset_vehicle_maxspeed(4.0)
-    traci.simulationStep()
-    ms = _getmergingspeed()
-    sat = _getsaturation()
-    ttt = _gettotaltraveltime()
-    ttt_list[i] = ttt
-    merging_speed[i] = ms
+for i in range(720):
+    pool.apply_async(reset_vehicle_maxspeed(4.0))
+    for _ in range(15):
+        traci.simulationStep()
+        ms = pool.apply_async(_getmergingspeed()).get()
+        sat = pool.apply_async(_getsaturation()).get()
+        ttt = pool.apply_async(_gettotaltraveltime()).get()
+        ttt_list.append(ttt)
+        merging_speed.append(ms)
     num_arrow = int(i * 50 / 10800)
     num_line = 50 - num_arrow
     percent = i * 100.0 / 10800
