@@ -135,11 +135,11 @@ def Train():
     path_net = os.path.join('./savednetwork/', 'network_checkpoint.pth')
     path_buffer = os.path.join('./savednetwork/', 'buffer_checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         net.cuda()
-        torch.backends.cudnn.benchmark = True
+        #torch.backends.cudnn.benchmark = True
     if next(net.parameters()).is_cuda:
         print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
     else:
@@ -160,6 +160,17 @@ def Train():
     frame_idx = 0
     flag = True
     beta = params['BETA_START']
+
+    #Add graph
+    if frame_idx == 0:
+        print("=> Now drawing graph...")
+        state = env.reset()
+        state = np.expand_dims(state, 0)
+        state = torch.from_numpy(state).to(device)
+        writer.add_graph(net, state)
+        print("=> Graph done!")
+        env.close()
+        del state
 
     #Load previous network
     if path_net and path_buffer:

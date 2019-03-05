@@ -45,12 +45,12 @@ class SumoEnv(gym.Env):
     '''Sumo Environment is a simulation environment which provides necessary parameters for training. On-ramp simulation
     environment could be modified in xml files in project.'''
     #Memory Organization
-    __slots__ = 'demonstration', 'frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
-        'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'lane_length', 'action_set', \
-            'death_factor', 'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'stackframes'
+    __slots__ = ['frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
+        'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'action_set', \
+            'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'stackframes']
     def __init__(self, frameskip= 10, stackframes=1):
         #create environment
-        
+
         self.frameskip = frameskip
         self.run_step = 0
         self.lane_list = list()
@@ -59,7 +59,6 @@ class SumoEnv(gym.Env):
         self.lanearea_dec_list = list()
         self.lanearea_max_speed = dict()
         self.lanearea_ob = list()
-        self.lane_length = list()
         self.action_set = dict()
         self.stackframes = stackframes
         self.frames = deque([], maxlen=self.stackframes)
@@ -72,8 +71,6 @@ class SumoEnv(gym.Env):
         net_tree = ET.parse("./Project/ramp.net.xml")
         for lane in net_tree.iter("lane"):
             self.lane_list.append(lane.attrib["id"])
-            self.lane_length.append(float(lane.attrib["length"]))
-        #self.state_shape = (3, len(self.lane_list), 441)
         self.observation_space = spaces.Box(low= -1, high=100, shape=(self.stackframes, 3 * len(self.lane_list), 441), dtype=np.float32)
 
         # initialize lanearea_dec_list
@@ -113,7 +110,7 @@ class SumoEnv(gym.Env):
     def is_episode(self):
         if self.run_step == TOTAL_TIME:
             print('Scenario ends... at phase %d' % (self.run_step / 1800 + 1))
-            traci.close(False)
+            traci.close()
             return True
         return False
 
@@ -142,19 +139,13 @@ class SumoEnv(gym.Env):
     def update_observation(self):
         state = np.empty((1, 3* len(self.lane_list), 441), dtype = np.float32)
         #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
-    
-        lane_map = [0] * len(self.lane_list)
-        i=0
-        for lane in self.lane_list:
-            lane_map[i]=lane
-            i+=1
 
         vehicle_position = np.zeros((len(self.lane_list),441),dtype = np.float32)
         vehicle_speed = np.zeros((len(self.lane_list),441),dtype = np.float32)
         vehicle_acceleration = np.zeros((len(self.lane_list),441),dtype = np.float32)
 
         for lane in self.lane_list:
-            lane_index = lane_map.index(lane)
+            lane_index = self.lane_list.index(lane)
             lane_len = traci.lane.getLength(lane)
             lane_stop = int (lane_len / VEHICLE_MEAN_LENGTH)
             for i in range(lane_stop, 440):
@@ -162,11 +153,11 @@ class SumoEnv(gym.Env):
 
         current_step_vehicle = list()
         for lane in self.lane_list:
-            current_step_vehicle += self.vehicle_list[self.run_step][lane]
+            current_step_vehicle += (self.vehicle_list[self.run_step][lane])
 
         for vehicle in current_step_vehicle:
             vehicle_in_lane = traci.vehicle.getLaneID(vehicle)
-            lane_index = lane_map.index(vehicle_in_lane)
+            lane_index = self.lane_list.index(vehicle_in_lane)
             vehicle_pos= traci.vehicle.getPosition(vehicle)
             lane_shape = traci.lane.getShape(vehicle_in_lane)
             vehicle_index = abs(int((vehicle_pos[0]-lane_shape[0][0])/VEHICLE_MEAN_LENGTH))
@@ -176,6 +167,7 @@ class SumoEnv(gym.Env):
             vehicle_acceleration[lane_index][vehicle_index] = traci.vehicle.getAcceleration(vehicle)
         
         state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
+        del current_step_vehicle
         return state
     
     def _getmergingspeed(self):
@@ -235,7 +227,7 @@ class SumoEnv(gym.Env):
         for j in range(num_steps):
             traci.simulationStep()
             reward += self.step_reward()
-            self.status()
+            #self.status()
             self.run_step += 1
             if j >= num_steps - self.stackframes:
                 self.update_target_vehicle_set()
@@ -274,4 +266,4 @@ class SumoEnv(gym.Env):
         return [seed1, seed2]
     
     def close(self):
-        traci.close(False)
+        traci.close()
