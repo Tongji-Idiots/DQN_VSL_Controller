@@ -11,11 +11,11 @@ Constants = {
 
         
         ### MEMORY HYPERPARAMETERS
-        'replay_size':      10000, # number of previous transitions to remember
-        'replay_initial':   10000,  #Timesteps to observe before training
+        'replay_size':      100000, # number of previous transitions to remember
+        'replay_initial':   100000,  #Timesteps to observe before training
 
         # EXPLORATION HYPERPARAMETERS for epsilon greedy strategy
-        'epsilon_frame':    10000, # epsilon decay factor
+        'epsilon_frame':    100000, # epsilon decay factor
         'epsilon_start':    1,    # exploration probability at start
         'epsilon_final':    0.01,  # minimum exploration probability
         'learning_rate':    0.0001,# exponential decay rate for exploration prob
@@ -23,7 +23,7 @@ Constants = {
         #Prio-learning factors
         'PRIO_REPLAY_ALPHA': 0.6,
         'BETA_START':        0.4,
-        'BETA_FRAMES':       10000,
+        'BETA_FRAMES':       100000,
 
         # Q LEARNING hyperparameters
         'gamma':            0.95,  # Discountings rate

@@ -19,7 +19,6 @@ import env as Env
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
 from common import action, agent, utils, experience, tracker
-from multiprocessing import Pool
 
 # Global Variable:
 #parser.add_argument("--resume", default = None, type = str, metavar= path, help= 'path to latest checkpoint')
@@ -135,13 +134,13 @@ def Train():
     path_net = os.path.join('./savednetwork/', 'network_checkpoint.pth')
     path_buffer = os.path.join('./savednetwork/', 'buffer_checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available():
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        net.cuda()
-        #torch.backends.cudnn.benchmark = True
-    if next(net.parameters()).is_cuda:
-        print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
+        device = torch.device("cuda")
+        net.to(device)
+        torch.backends.cudnn.benchmark = True
+        if next(net.parameters()).is_cuda:
+            print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
     else:
         device = torch.device("cpu")
         print("Now using CPU for training")
