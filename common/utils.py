@@ -16,7 +16,7 @@ Constants = {
 
         # EXPLORATION HYPERPARAMETERS for epsilon greedy strategy
         'epsilon_frame':    100000, # epsilon decay factor
-        'epsilon_start':    1,    # exploration probability at start
+        'epsilon_start':    0.1,    # exploration probability at start
         'epsilon_final':    0.01,  # minimum exploration probability
         'learning_rate':    0.0001,# exponential decay rate for exploration prob
 
@@ -29,7 +29,7 @@ Constants = {
         'gamma':            0.95,  # Discountings rate
 
         ### TRAINING HYPERPARAMETERS
-        'stop_reward':      18.0,   # Maximum reward to stop training
+        'stop_reward':      720.0,   # Maximum reward to stop training
         'batch_size':       64,
 
         # FIXED Q TARGETS HYPERPARAMETERS
