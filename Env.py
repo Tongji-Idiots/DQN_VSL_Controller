@@ -150,12 +150,13 @@ class SumoEnv(gym.Env):
         vehicle_speed = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
         vehicle_acceleration = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
 
-        for lane in self.lane_list:
+        #originally set -1 on no road sections (abandoned)
+        '''for lane in self.lane_list:
             lane_index = self.lane_list.index(lane)
             lane_len = traci.lane.getLength(lane)
             lane_stop = int (lane_len / VEHICLE_MEAN_LENGTH/self.downsample) 
             for i in range(lane_stop, self.maxlen):
-                vehicle_position[lane_index][i] = -1.0
+                vehicle_position[lane_index][i] = -1.0'''
 
         current_step_vehicle = list()
         for lane in self.lane_list:
