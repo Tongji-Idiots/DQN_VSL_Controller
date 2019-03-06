@@ -33,11 +33,11 @@ class DuelingNetwork(nn.Module):
         super(DuelingNetwork, self).__init__()
 
         self.convolutional_Layer = nn.Sequential(
-            nn.Conv2d(input_shape[0], 32, kernel_size=9, stride=4),
+            nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.Conv2d(64, 64, kernel_size=2, stride=1),
             nn.ReLU()
         )
 
@@ -103,12 +103,12 @@ def save_model(net, buffer, beta, optim, path_net, path_buffer, frame):
         #optimizer:
 		'optimizer': optim},
 		path_net)
-	torch.save({
+	'''torch.save({
         #prioritized replay params:
         'buffer': buffer.buffer,
         'priorities': buffer.priorities,
         'pos': buffer.pos},
-        path_buffer)
+        path_buffer)'''
 
 # Load pretrained model
 def load_model(net, path_net, path_buffer):
@@ -116,18 +116,18 @@ def load_model(net, path_net, path_buffer):
 	net.load_state_dict(state_dict['state_dict'])
 	frame = state_dict['frame']
 	optimizer = state_dict['optimizer']
-	print("Having pre-trained %d frames." % frame)
-	buffer_dict = torch.load(path_buffer)
+	print("Having previously run %d frames." % frame)
+	'''buffer_dict = torch.load(path_buffer)
 	buffer = buffer_dict['buffer']
 	priorities = buffer_dict['priorities']
-	pos = buffer_dict['pos']
+	pos = buffer_dict['pos']'''
 	net.train()
-	return net, frame + 1, buffer, priorities, pos, optimizer
+	return net, frame + 1, optimizer
 
 # Training
 def Train():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(frameskip= 15, stackframes= 3)
+    env = Env.SumoEnv(frameskip= 15)
     env.unwrapped
     net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
 
@@ -175,7 +175,7 @@ def Train():
     if path_net and path_buffer:
         if os.path.isfile(path_net) and os.path.isfile(path_buffer):
             print("=> Loading checkpoint '{}'".format(path_net))
-            net, frame_idx, buffer.buffer, buffer.priorities, buffer.pos, optimizer = load_model(net, path_net, path_buffer)
+            net, frame_idx, optimizer = load_model(net, path_net, path_buffer)
             print("Checkpoint loaded successfully! ")
         else:
             optimizer = optim.Adam(net.parameters(), lr=params['learning_rate'])

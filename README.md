@@ -328,3 +328,39 @@ def _getmergingspeed(self):
         else:
             reward = 0.1 * speed_reward * np.clip(satur_discount, -1, 1) * 0.06
         return reward
+
+7. simplify observation space
+original:
+    def update_observation(self):
+        state = np.empty((1, 3* len(self.lane_list), 441), dtype = np.float32)
+        #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
+
+        vehicle_position = np.zeros((len(self.lane_list),441),dtype = np.float32)
+        vehicle_speed = np.zeros((len(self.lane_list),441),dtype = np.float32)
+        vehicle_acceleration = np.zeros((len(self.lane_list),441),dtype = np.float32)
+
+        for lane in self.lane_list:
+            lane_index = self.lane_list.index(lane)
+            lane_len = traci.lane.getLength(lane)
+            lane_stop = int (lane_len / VEHICLE_MEAN_LENGTH)
+            for i in range(lane_stop, 440):
+                vehicle_position[lane_index][i] = vehicle_speed[lane_index][i] = vehicle_acceleration[lane_index][i] = -1.0
+
+        current_step_vehicle = list()
+        for lane in self.lane_list:
+            current_step_vehicle += (self.vehicle_list[self.run_step][lane])
+
+        for vehicle in current_step_vehicle:
+            vehicle_in_lane = traci.vehicle.getLaneID(vehicle)
+            lane_index = self.lane_list.index(vehicle_in_lane)
+            vehicle_pos= traci.vehicle.getPosition(vehicle)
+            lane_shape = traci.lane.getShape(vehicle_in_lane)
+            vehicle_index = abs(int((vehicle_pos[0]-lane_shape[0][0])/VEHICLE_MEAN_LENGTH))
+
+            vehicle_position[lane_index][vehicle_index] = 1.0
+            vehicle_speed[lane_index][vehicle_index] = traci.vehicle.getSpeed(vehicle) 
+            vehicle_acceleration[lane_index][vehicle_index] = traci.vehicle.getAcceleration(vehicle)
+        
+        state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
+        del current_step_vehicle
+        return state

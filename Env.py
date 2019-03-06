@@ -21,9 +21,10 @@ from sumolib import checkBinary
 
 #Environment Constants
 STATE_SHAPE = (81, 441, 1)      
-WARM_UP_TIME = 2 * 1e2
-TOTAL_TIME = 108 * 1e2
+WARM_UP_TIME = 3 * 1e2
+TOTAL_TIME = 9 * 1e3
 VEHICLE_MEAN_LENGTH = 5
+MAX_LENGTH = 2196.82
 speeds = [11.11, 13.89, 16.67, 19.44, 22.22]  # possible actions collection
 
 class LazyFrames(object):
@@ -47,8 +48,8 @@ class SumoEnv(gym.Env):
     #Memory Organization
     __slots__ = ['frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
         'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'action_set', \
-            'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'stackframes']
-    def __init__(self, frameskip= 10, stackframes=1):
+            'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'maxlen', 'downsample']
+    def __init__(self, frameskip= 10, downsample=5):
         #create environment
 
         self.frameskip = frameskip
@@ -60,8 +61,9 @@ class SumoEnv(gym.Env):
         self.lanearea_max_speed = dict()
         self.lanearea_ob = list()
         self.action_set = dict()
-        self.stackframes = stackframes
-        self.frames = deque([], maxlen=self.stackframes)
+        self.downsample = downsample
+        self.maxlen = 1+round((1+round(MAX_LENGTH/5))/5) 
+        self.frames = deque([], maxlen= 1)
 
         # initialize sumo path
         self.sumoBinary = " "
@@ -71,7 +73,8 @@ class SumoEnv(gym.Env):
         net_tree = ET.parse("./Project/ramp.net.xml")
         for lane in net_tree.iter("lane"):
             self.lane_list.append(lane.attrib["id"])
-        self.observation_space = spaces.Box(low= -1, high=100, shape=(self.stackframes, 3 * len(self.lane_list), 441), dtype=np.float32)
+        self.observation_space = spaces.Box(low= -1, high=100, shape=(1, 3*len(self.lane_list), \
+            self.maxlen), dtype=np.float32)
 
         # initialize lanearea_dec_list
         dec_tree = ET.parse("./Project/ramp.add.xml")
@@ -137,19 +140,23 @@ class SumoEnv(gym.Env):
         return [self.lane_list, self.vehicle_position]
     
     def update_observation(self):
-        state = np.empty((1, 3* len(self.lane_list), 441), dtype = np.float32)
+
+        self.update_target_vehicle_set()
+        self.transform_vehicle_position()
+        state = np.zeros((1, 3*len(self.lane_list), self.maxlen), dtype = np.float32)
         #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
 
-        vehicle_position = np.zeros((len(self.lane_list),441),dtype = np.float32)
-        vehicle_speed = np.zeros((len(self.lane_list),441),dtype = np.float32)
-        vehicle_acceleration = np.zeros((len(self.lane_list),441),dtype = np.float32)
+        vehicle_position = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
+        vehicle_speed = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
+        vehicle_acceleration = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
 
-        for lane in self.lane_list:
+        #originally set -1 on no road sections (abandoned)
+        '''for lane in self.lane_list:
             lane_index = self.lane_list.index(lane)
             lane_len = traci.lane.getLength(lane)
-            lane_stop = int (lane_len / VEHICLE_MEAN_LENGTH)
-            for i in range(lane_stop, 440):
-                vehicle_position[lane_index][i] = vehicle_speed[lane_index][i] = vehicle_acceleration[lane_index][i] = -1.0
+            lane_stop = int (lane_len / VEHICLE_MEAN_LENGTH/self.downsample) 
+            for i in range(lane_stop, self.maxlen):
+                vehicle_position[lane_index][i] = -1.0'''
 
         current_step_vehicle = list()
         for lane in self.lane_list:
@@ -161,10 +168,18 @@ class SumoEnv(gym.Env):
             vehicle_pos= traci.vehicle.getPosition(vehicle)
             lane_shape = traci.lane.getShape(vehicle_in_lane)
             vehicle_index = abs(int((vehicle_pos[0]-lane_shape[0][0])/VEHICLE_MEAN_LENGTH))
+            vehicle_index = round(vehicle_index / self.downsample)
 
-            vehicle_position[lane_index][vehicle_index] = 1.0
-            vehicle_speed[lane_index][vehicle_index] = traci.vehicle.getSpeed(vehicle) 
-            vehicle_acceleration[lane_index][vehicle_index] = traci.vehicle.getAcceleration(vehicle)
+            vehicle_position[lane_index][vehicle_index] += 1.0
+            vehicle_speed[lane_index][vehicle_index] += traci.vehicle.getSpeed(vehicle) 
+            vehicle_acceleration[lane_index][vehicle_index] += traci.vehicle.getAcceleration(vehicle)
+
+        for lane_num in range(len(self.lane_list)):
+            for vehicle_num in range(len(vehicle_position[lane_num])):
+                if vehicle_position[lane_num][vehicle_num] == 0 or vehicle_position[lane_num][vehicle_num] == -1:
+                    continue
+                vehicle_speed[lane_num][vehicle_num] /= vehicle_position[lane_num][vehicle_num]
+                vehicle_acceleration[lane_num][vehicle_num] /= vehicle_position[lane_num][vehicle_num]
         
         state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
         del current_step_vehicle
@@ -185,7 +200,7 @@ class SumoEnv(gym.Env):
         return ttt
 
     def _transformedtanh(self, x, alpha=1):
-        return (np.exp(-x/alpha) - np.exp(x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
+        return (np.exp(x/alpha) - np.exp(-x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
     
     def step_reward(self):
         #Using waiting_time to present reward.
@@ -229,11 +244,8 @@ class SumoEnv(gym.Env):
             reward += self.step_reward()
             #self.status()
             self.run_step += 1
-            if j >= num_steps - self.stackframes:
-                self.update_target_vehicle_set()
-                self.transform_vehicle_position()
-                self.frames.append(self.update_observation())
         # Update observation of environment state.
+        self.frames.append(self.update_observation())
         observation = LazyFrames(list(self.frames))
         return observation, reward / num_steps, self.is_episode(), {'ms': self._getmergingspeed(), 'ttt': self._gettotaltraveltime()}
 
@@ -251,8 +263,7 @@ class SumoEnv(gym.Env):
         self.run_step = 0
 
         obs = self.update_observation()
-        for _ in range(self.stackframes):
-            self.frames.append(obs)
+        self.frames.append(obs)
         del obs
 
         return LazyFrames(list(self.frames))
