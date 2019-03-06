@@ -39,9 +39,18 @@ def draw():
     nn_ms_smooth = spline(frame, nn_ms, frame_new)
     nn_ttt_smooth = spline(frame, nn_ttt, frame_new)
 
+    plt.subplot(1, 1, 1)
+    plt.title("Mean Speed Graph")
     plt.plot(frame_new,ori_ms_smooth, color="red", label="ori_ms")
     plt.plot(frame_new,cum_ms_smooth, color="green", label="cus_ms")
     plt.plot(frame_new,nn_ms_smooth, color="blue", label="nn_ms")
+
+    plt.subplot(1, 1, 2)
+    plt.title("Total Travel Time Graph")
+    plt.plot(frame_new,ori_ttt_smooth, color="red", label="ori_ttt")
+    plt.plot(frame_new,cum_ttt_smooth, color="green", label="cus_ttt")
+    plt.plot(frame_new,nn_ttt_smooth, color="blue", label="nn_ttt")
+
     plt.show()
 
 if __name__ == "__main__":
