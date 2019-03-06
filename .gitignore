@@ -20,3 +20,4 @@ savednetwork/2019-03-01-07-35-59/checkpoint.pth
 *.log
 *.log
 *.log
+savednetwork/network_checkpoint.pth
