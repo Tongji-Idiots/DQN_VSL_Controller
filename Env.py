@@ -235,7 +235,7 @@ class SumoEnv(gym.Env):
                 self.frames.append(self.update_observation())
         # Update observation of environment state.
         observation = LazyFrames(list(self.frames))
-        return observation, reward / num_steps, self.is_episode(), {'No info'}
+        return observation, reward / num_steps, self.is_episode(), {'ms': self._getmergingspeed(), 'ttt': self._gettotaltraveltime()}
 
     def reset(self):
         # Reset simulation with the random seed randomly selected the pool.
