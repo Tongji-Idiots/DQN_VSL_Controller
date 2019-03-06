@@ -125,11 +125,11 @@ def benchmark():
     #Then run a scenario with custom VSL regulations
     custom = root.find("custom")
     data_cust = np.empty((2, Total_Time), dtype=np.float32)
-    action = 4
+    act = 4
     env.reset()
     for i in range(Total_Time):
-        _, _, _, custom_dict = env.step(action)
-        action = custom_opt(custom_dict)
+        _, _, _, custom_dict = env.step(act)
+        act = custom_opt(custom_dict)
         data_cust[0][i] = custom_dict["ms"]
         data_cust[1][i] = custom_dict["ttt"]
 
@@ -165,8 +165,8 @@ def benchmark():
     state = env.reset()
     data_nn = np.empty((2, Total_Time), dtype=np.float32)
     for i in range(Total_Time):
-        action, _ = agents(state)
-        state, _, _, net_dict = env.step(action)
+        act, _ = agents(state)
+        state, _, _, net_dict = env.step(act)
         epsilon_tracker.frame(i)
         data_nn[0][i] = net_dict["ms"]
         data_nn[1][i] = net_dict["ttt"]

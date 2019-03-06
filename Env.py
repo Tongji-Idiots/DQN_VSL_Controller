@@ -47,9 +47,9 @@ class SumoEnv(gym.Env):
     environment could be modified in xml files in project.'''
     #Memory Organization
     __slots__ = ['frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
-        'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'action_set', \
+        'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'action_set', 'evaluation'\
             'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'maxlen', 'downsample']
-    def __init__(self, frameskip= 10, downsample=5):
+    def __init__(self, frameskip= 10, downsample=5, evaluation=False):
         #create environment
 
         self.frameskip = frameskip
@@ -59,11 +59,13 @@ class SumoEnv(gym.Env):
         self.vehicle_position = list()
         self.lanearea_dec_list = list()
         self.lanearea_max_speed = dict()
-        self.lanearea_ob = list()
         self.action_set = dict()
         self.downsample = downsample
         self.maxlen = 1+round((1+round(MAX_LENGTH/5))/5) 
         self.frames = deque([], maxlen= 1)
+        self.evaluation = evaluation
+        if self.evaluation:
+            self.eval_seed = self.seed()[1]
 
         # initialize sumo path
         self.sumoBinary = " "
@@ -82,8 +84,6 @@ class SumoEnv(gym.Env):
             if lanearea_dec.attrib["freq"] == '60':
                 self.lanearea_dec_list.append(lanearea_dec.attrib["id"])
                 self.lanearea_max_speed[lanearea_dec.attrib["id"]] = 22.22
-            else:
-                self.lanearea_ob.append(lanearea_dec.attrib["id"])
  
         # initalize action set
         i = 0
@@ -187,25 +187,25 @@ class SumoEnv(gym.Env):
     
     def _getmergingspeed(self):
         ms = list()
-        for lane in self.lanearea_ob:
-            ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
+        for lane in self.lane_list:
+            if "merging" in lane:
+                ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
         meanspeed = np.mean(ms)
         return meanspeed
     
-    def _gettotaltraveltime(self):
-        ttt = 0.0
+    def _gettotalwaitingtime(self):
+        twt = 0.0
         for lane in self.lane_list:
-            if "merging" in lane:
-                ttt += traci.lane.getLastStepVehicleNumber(lane)/(traci.lane.getLength(lane) / 5)
-        return ttt
+            twt += traci.lane.getWaitingTime(lane)
+        return twt
 
     def _transformedtanh(self, x, alpha=1):
         return (np.exp(x/alpha) - np.exp(-x/alpha))/(np.exp(x/alpha) + np.exp(-x/alpha))
     
     def step_reward(self):
         #Using waiting_time to present reward.
-        return (self._transformedtanh((self._getmergingspeed()-12)*0.4) \
-             - self._transformedtanh((self._gettotaltraveltime()-27)*0.4)) / 2
+        return self._transformedtanh((self._getmergingspeed()-18)*0.8) \
+             - self._transformedtanh(self._gettotaltraveltime()*0.09)
     
     def reset_vehicle_maxspeed(self):
         for lane in self.lane_list:
@@ -253,10 +253,18 @@ class SumoEnv(gym.Env):
         # Reset simulation with the random seed randomly selected the pool.
         self.frames.clear()
 
-        self.sumoBinary = "sumo"
-        seed = self.seed()[1]
-        traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed', str(seed), '--quit-on-end'], label='training')
-        self.scenario = traci.getConnection('training')
+        if self.evaluation:
+            self.sumoBinary = "sumo"
+            seed = self.eval_seed
+            traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed',\
+                 str(seed), '--quit-on-end'], label='evaluation')
+            self.scenario = traci.getConnection('evaluation')
+        else:
+            self.sumoBinary = "sumo"
+            seed = self.seed()[1]
+            traci.start([self.sumoBinary, '-c', self.projectFile + 'ramp.sumo.cfg', '--start','--seed',\
+                 str(seed), '--quit-on-end'], label='training')
+            self.scenario = traci.getConnection('training')
 
         self.warm_up_simulation()
 

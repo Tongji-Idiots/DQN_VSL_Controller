@@ -70,14 +70,6 @@ def _getmaxspeed():
         for vehicle in vehicle_l:
             v.append(traci.vehicle.getMaxSpeed(vehicle))
     return np.max(v)
-
-def _getmergingspeed():
-    global lanearea_ob
-    ms = list()
-    for lane in lanearea_ob:
-        ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
-    meanspeed = np.mean(ms)
-    return meanspeed
     
 def _getsaturation():
     global lane_list
@@ -90,15 +82,21 @@ def _getsaturation():
     saturation = ans
     return saturation
 
-def _gettotaltraveltime():
+def _getmergingspeed():
     global lane_list
-    traveltime = list()
+    ms = list()
     for lane in lane_list:
         if "merging" in lane:
-            traveltime.append(traci.lane.getTraveltime(lane))
-    ans = np.sum((traveltime))
-    #print("saturation:" + str(ans))
-    return ans
+            ms.append(traci.lane.getLastStepMeanSpeed(lane))
+    meanspeed = np.mean(ms)
+    return meanspeed
+    
+def _gettotalwaitingtime():
+    global lane_list
+    twt = 0.0
+    for lane in lane_list:
+        twt += traci.lane.getWaitingTime(lane)
+    return twt
 
 def reset_vehicle_maxspeed(vsl):
     for dec_lane in lanearea_dec_list:
@@ -121,7 +119,7 @@ def Vopt(ttt):
         pass
     pass
 
-ttt_list = list()
+twt_list = list()
 merging_speed = list()
 warm_up_simulation()
 fig = plt.figure(figsize = (12, 8))
@@ -129,9 +127,9 @@ for i in range(10800):
     traci.simulationStep()
     ms = _getmergingspeed()
     sat = _getsaturation()
-    ttt = _gettotaltraveltime()
-    print(_getmaxspeed())
-    ttt_list.append(ttt)
+    twt = _gettotalwaitingtime()
+    #print(_getmaxspeed())
+    twt_list.append(twt)
     merging_speed.append(ms)
     num_arrow = int(i * 50 / 10800)
     num_line = 50 - num_arrow
@@ -140,7 +138,7 @@ for i in range(10800):
     sys.stdout.write(process_bar)
     sys.stdout.flush()
     #print("Steps: %d" % i, "Meanspeed: %.2f" % ms, " Saturation: %.4f" % sat, " Total travel time: %.4f" % ttt)
-print("85 percent travel time: %.4f" % np.percentile(ttt_list, 85), " 15 percent travel time: %.4f" % np.percentile(ttt_list, 15), \
+print("max waiting time: %.4f" % np.max(twt_list), " 15 percent travel time: %.4f" % np.percentile(twt_list, 15), \
     " 85 percent merging speed: %.2f" % np.percentile(merging_speed, 85), " 15 percent merging speed: %.2f" % np.percentile(merging_speed, 15))
 x = range(10800)
 np.seterr(divide='ignore',invalid='ignore')
@@ -154,7 +152,7 @@ plt.sca(ax1)
 
 ax2 = fig.add_subplot(132)
 ax2.grid(True)
-plt.plot(x, ttt_list)
+plt.plot(x, twt_list)
 plt.title("Total travel time")
 plt.sca(ax2)
 
