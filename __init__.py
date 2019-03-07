@@ -1,4 +1,4 @@
-from . import Env_init
-from . import VSLcore
+from . import env
+from . import core
 
-__all__ = ["Env_init", "VSLcore"]
+__all__ = ["env", "core"]

@@ -34,10 +34,13 @@ class DuelingNetwork(nn.Module):
 
         self.convolutional_Layer = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=2, stride=1),
+            nn.BatchNorm2d(64),
             nn.ReLU()
         )
 
@@ -59,8 +62,8 @@ class DuelingNetwork(nn.Module):
         return int(np.prod(o.size()))
 
     def forward(self, x):
-        fx = x.float() / 100
-        conv_out = self.convolutional_Layer(fx).view(fx.size()[0], -1)
+        x = x.float()
+        conv_out = self.convolutional_Layer(x).view(x.size()[0], -1)
         val = self.fully_connected_val(conv_out)
         adv = self.fully_connected_adv(conv_out)
         return val + adv - adv.mean()
@@ -127,26 +130,23 @@ def load_model(net, path_net, path_buffer):
 # Training
 def Train():   
     writer = SummaryWriter(comment = '-VSL-Dueling')
-    env = Env.SumoEnv(frameskip= 15)
-    env.unwrapped
-    net = DuelingNetwork(env.observation_space.shape, env.action_space.n)
-
+    
     path_net = os.path.join('./savednetwork/', 'network_checkpoint.pth')
     path_buffer = os.path.join('./savednetwork/', 'buffer_checkpoint.pth')
     print("CUDA™ is " + ("AVAILABLE" if torch.cuda.is_available() else "NOT AVAILABLE"))
     if torch.cuda.is_available():
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         device = torch.device("cuda")
-        net.to(device)
         torch.backends.cudnn.benchmark = True
-        if next(net.parameters()).is_cuda:
-            print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
     else:
         device = torch.device("cpu")
         print("Now using CPU for training")
-    
+    env = Env.SumoEnv(frameskip= 15, device=device)
+    env.unwrapped
+    net = DuelingNetwork(env.observation_space.shape, env.action_space.n).to(device)
+    if next(net.parameters()).is_cuda:
+        print("Now using {} for training".format(torch.cuda.get_device_name(torch.cuda.current_device())))
     print("Observation space: {}, Action size:{}".format(env.observation_space.shape,env.action_space.n))
-
     tgt_net = agent.TargetNet(net)
     selector = action.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
     epsilon_tracker = tracker.EpsilonTracker(selector, params)

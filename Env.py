@@ -1,4 +1,3 @@
-# Environment Construction
 import numpy as np
 import os,sys
 sys.path.append("./lib")
@@ -48,8 +47,8 @@ class SumoEnv(gym.Env):
     #Memory Organization
     __slots__ = ['frameskip', 'run_step', 'lane_list', 'vehicle_list', 'vehicle_position', \
         'lanearea_dec_list', 'lanearea_max_speed','lanearea_ob', 'action_set', 'evaluation'\
-            'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'frames', 'maxlen', 'downsample']
-    def __init__(self, frameskip= 10, downsample=5, evaluation=False):
+            'sumoBinary', 'projectFile', 'observation_space', 'action_space', 'maxlen', 'downsample']
+    def __init__(self, frameskip= 10, downsample=5, device='cpu', evaluation=False):
         #create environment
 
         self.frameskip = frameskip
@@ -61,9 +60,9 @@ class SumoEnv(gym.Env):
         self.lanearea_max_speed = dict()
         self.action_set = dict()
         self.downsample = downsample
-        self.maxlen = 1+round((1+round(MAX_LENGTH/5))/5) 
-        self.frames = deque([], maxlen= 1)
+        self.maxlen = 1+round((1+round(MAX_LENGTH/5))/5)
         self.evaluation = evaluation
+        self.device = device
         if self.evaluation:
             self.eval_seed = self.seed()[1]
 
@@ -144,7 +143,6 @@ class SumoEnv(gym.Env):
         self.update_target_vehicle_set()
         self.transform_vehicle_position()
         state = np.zeros((1, 3*len(self.lane_list), self.maxlen), dtype = np.float32)
-        #self.state_shape = torch.from_numpy(state).shape if device == "cuda" else state.shape
 
         vehicle_position = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
         vehicle_speed = np.zeros((len(self.lane_list),self.maxlen),dtype = np.float32)
@@ -181,15 +179,14 @@ class SumoEnv(gym.Env):
                 vehicle_speed[lane_num][vehicle_num] /= vehicle_position[lane_num][vehicle_num]
                 vehicle_acceleration[lane_num][vehicle_num] /= vehicle_position[lane_num][vehicle_num]
         
-        state[0] = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
-        del current_step_vehicle
+        state = np.concatenate((vehicle_position, vehicle_speed, vehicle_acceleration), axis= 0)
         return state
     
     def _getmergingspeed(self):
         ms = list()
         for lane in self.lane_list:
             if "merging" in lane:
-                ms.append(traci.lanearea.getLastStepMeanSpeed(lane))
+                ms.append(traci.lane.getLastStepMeanSpeed(lane))
         meanspeed = np.mean(ms)
         return meanspeed
     
@@ -205,7 +202,7 @@ class SumoEnv(gym.Env):
     def step_reward(self):
         #Using waiting_time to present reward.
         return self._transformedtanh((self._getmergingspeed()-18)*0.8) \
-             - self._transformedtanh(self._gettotaltraveltime()*0.09)
+             - self._transformedtanh(self._gettotalwaitingtime()*0.09)
     
     def reset_vehicle_maxspeed(self):
         for lane in self.lane_list:
@@ -229,7 +226,6 @@ class SumoEnv(gym.Env):
     
     def step(self, a):
         # Conduct action, update observation and collect reward.
-        self.frames.clear()
         reward = 0.0
         action = self.action_set[a]
         for i in range(3):
@@ -239,20 +235,17 @@ class SumoEnv(gym.Env):
         else:
             num_steps = self.np_random.randint(self.frameskip[0], self.frameskip[1])
         self.reset_vehicle_maxspeed()
-        for j in range(num_steps):
+        for _ in range(num_steps):
             traci.simulationStep()
             reward += self.step_reward()
             #self.status()
             self.run_step += 1
         # Update observation of environment state.
-        self.frames.append(self.update_observation())
-        observation = LazyFrames(list(self.frames))
-        return observation, reward / num_steps, self.is_episode(), {'ms': self._getmergingspeed(), 'ttt': self._gettotaltraveltime()}
+        observation = torch.from_numpy(self.update_observation()).unsqueeze(0).to(self.device)
+        return observation, reward / num_steps, self.is_episode(), {}
 
     def reset(self):
         # Reset simulation with the random seed randomly selected the pool.
-        self.frames.clear()
-
         if self.evaluation:
             self.sumoBinary = "sumo"
             seed = self.eval_seed
@@ -270,11 +263,9 @@ class SumoEnv(gym.Env):
 
         self.run_step = 0
 
-        obs = self.update_observation()
-        self.frames.append(obs)
-        del obs
+        obs = torch.from_numpy(self.update_observation()).unsqueeze(0).to(self.device)
 
-        return LazyFrames(list(self.frames))
+        return obs 
     
     def seed(self, seed= None):
         self.np_random, seed1 = seeding.np_random(seed)
